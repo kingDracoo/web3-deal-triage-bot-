@@ -1,2 +1,4 @@
 python-telegram-bot==22.3
 requests==2.31.0
+telethon==1.36.0
+aiohttp==3.9.5
