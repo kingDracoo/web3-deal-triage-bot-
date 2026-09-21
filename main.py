@@ -1,52 +1,68 @@
 import os
-import json
 import logging
+import threading
 import requests
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
-# Setup logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Fetch environment variables
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-VIP_CHANNEL_ID = os.getenv("VIP_CHANNEL_ID")
+TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+OPENROUTER_API_KEY = os.environ["OPENROUTER_API_KEY"]
+VIP_CHANNEL_ID = os.environ["VIP_CHANNEL_ID"]
+PORT = int(os.environ.get("PORT", 10000))  # Render injects PORT automatically
 
-def analyze_deal_with_ai(text: str) -> dict:
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    prompt = (
-        "You are an AI Web3 Deal Triage Assistant. Analyze the incoming message and determine if it contains a business deal, "
-        "partnership inquiry, sponsorship pitch, advisory proposal, or high-value offer. "
-        "Respond ONLY with a valid JSON object matching this exact schema without any extra text or markdown code blocks:\n"
-        '{"is_business": boolean, "budget": number, "category": "string", "summary": "string"}'
-    )
+# --- Dummy HTTP server just to satisfy Render's port check ---
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is alive")
+    def log_message(self, format, *args):
+        pass  # silence noisy request logs
 
-    payload = {
-        "model": "meta-llama/llama-3.2-3b-instruct:free",
-        "messages": [
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": text}
-        ],
-        "temperature": 0.1
-    }
+def run_health_server():
+    server = HTTPServer(("0.0.0.0", PORT), HealthHandler)
+    server.serve_forever()
 
+# --- OpenRouter call ---
+def query_openrouter(prompt: str) -> str:
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=12)
-        response.raise_for_status()
-        data = response.json()
-        content = data["choices"][0]["message"]["content"].strip()
-        
-        # Clean potential markdown formatting if returned
-        if content.startswith("```json"):
-            content = content[7:-3].strip()
-        elif content.startswith("
+        resp = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
+            json={
+                "model": "meta-llama/llama-3.2-3b-instruct",
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=20,
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        logger.error(f"OpenRouter error: {e}")
+        return "Error evaluating lead."
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Bot is running.")
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        result = query_openrouter(update.message.text)
+        await update.message.reply_text(result)
+    except Exception as e:
+        logger.error(f"Handler error: {e}")
+
+def main():
+    threading.Thread(target=run_health_server, daemon=True).start()
+
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    logger.info(f"Starting polling, health server on port {PORT}...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == "__main__":
+    main()
