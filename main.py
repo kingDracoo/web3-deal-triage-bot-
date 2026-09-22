@@ -76,16 +76,21 @@ def save_leads():
 def classify(text: str) -> dict:
     prompt = (
         "You are a spam-triage assistant for a crypto/Web3 KOL or influencer whose "
-        "DMs are flooded daily. Decide if this incoming message is a genuine "
-        "opportunity worth their time, or spam/noise to ignore.\n\n"
-        "Genuine opportunities: a real collab or sponsorship offer from an "
+        "DMs are flooded daily. Decide if this incoming message is worth flagging "
+        "for the KOL to see, or is low-value noise to ignore.\n\n"
+        "Flag as important (important: true) if it is EITHER:\n"
+        "  (a) a genuine opportunity — a real collab or sponsorship offer from an "
         "identifiable project, a real partnership proposal, a real business/client "
         "lead (e.g. a project wanting paid promotion, an OTC or market-making "
-        "offer, an investor inquiry).\n\n"
-        "Spam/noise: fake or templated collab offers, phishing links, fake "
-        "support/wallet-verification messages, giveaway or airdrop scams, "
-        "copy-pasted bot-generated \"let's partner\" pitches sent to many people, "
-        "generic engagement farming, small talk.\n\n"
+        "offer, an investor inquiry), OR\n"
+        "  (b) a scam or phishing attempt worth warning them about — fake "
+        "support/wallet-verification messages, requests to send a wallet address "
+        "or seed phrase to 'receive payment', fake giveaway/airdrop scams, "
+        "impersonation attempts. These are dangerous, not just annoying — flag them.\n\n"
+        "Do NOT flag (important: false) generic low-effort noise: templated "
+        "bot-generated 'let's partner' pitches sent to many people with no real "
+        "offer, generic engagement farming, small talk, low-effort spam with no "
+        "real ask or threat.\n\n"
         f'Message:\n"""{text}"""\n\n'
         "Respond ONLY with strict JSON, no markdown formatting, in exactly this shape:\n"
         '{"important": true, "category": "collab_offer", "reason": "short sentence"}\n'
@@ -269,4 +274,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-  
+      
