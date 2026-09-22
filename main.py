@@ -148,21 +148,30 @@ telethon_client = TelegramClient(
 
 
 def register_telethon_handler(bot):
-    @telethon_client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private))
-    async def personal_dm_handler(event):
-        text = event.raw_text or ""
-        if not text.strip():
-            return
-        sender = await event.get_sender()
-        sender_name = (
-            getattr(sender, "username", None)
-            or getattr(sender, "first_name", None)
-            or "Unknown"
+    @telethon_client.on(events.NewMessage(incoming=True))
+    async def any_message_handler(event):
+        logger.info(
+            f"[Telethon] Raw event received — chat_id={event.chat_id} "
+            f"is_private={event.is_private} text={event.raw_text[:50] if event.raw_text else None!r}"
         )
-        result = classify(text)
-        logger.info(f"[Personal DM] from {sender_name}: important={result.get('important')}")
-        if result.get("important"):
-            await handle_important("Personal DM", f"@{sender_name}", text, result, bot=bot)
+        if not event.is_private:
+            return
+        try:
+            text = event.raw_text or ""
+            if not text.strip():
+                return
+            sender = await event.get_sender()
+            sender_name = (
+                getattr(sender, "username", None)
+                or getattr(sender, "first_name", None)
+                or "Unknown"
+            )
+            result = classify(text)
+            logger.info(f"[Personal DM] from {sender_name}: important={result.get('important')}")
+            if result.get("important"):
+                await handle_important("Personal DM", f"@{sender_name}", text, result, bot=bot)
+        except Exception:
+            logger.exception("Error handling personal DM event")
 
 
 # ---------------- Bot chat listener (python-telegram-bot) ----------------
@@ -260,4 +269,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
+  
