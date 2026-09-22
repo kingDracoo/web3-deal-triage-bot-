@@ -166,6 +166,16 @@ def register_telethon_handler(bot):
             if not text.strip():
                 return
             sender = await event.get_sender()
+
+            # Skip anything sent by our own bot (or any bot account) —
+            # otherwise the bot's own VIP-channel forwards get picked up
+            # as new "incoming" messages and re-classified in a loop.
+            sender_id = getattr(sender, "id", None)
+            is_bot_account = getattr(sender, "bot", False)
+            if is_bot_account or (sender_id is not None and str(sender_id) == str(bot.id)):
+                logger.info(f"[Telethon] Skipping message from bot account (id={sender_id})")
+                return
+
             sender_name = (
                 getattr(sender, "username", None)
                 or getattr(sender, "first_name", None)
@@ -274,4 +284,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-      
+          
