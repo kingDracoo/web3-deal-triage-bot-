@@ -45,6 +45,8 @@ from telegram.ext import (
 )
 
 logging.basicConfig(level=logging.INFO)
+# httpx logs full request URLs, and Telegram URLs contain the bot token.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("triage")
 
 # ---------------- Environment variables ----------------
@@ -341,4 +343,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-                        
+  
